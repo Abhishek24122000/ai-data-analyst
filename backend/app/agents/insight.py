@@ -87,7 +87,7 @@ def generate_insight(question: str, df: pd.DataFrame, llm: LLMClient) -> tuple[s
                     ChatMessage("user", INSIGHT_USER_TEMPLATE.format(question=question, facts=facts_text)),
                 ],
                 temperature=0.2,
-                max_tokens=220,
+                max_tokens=500,
             )
             return text.strip(), facts
         except Exception:  # noqa: BLE001 -- fall through to template on any LLM failure

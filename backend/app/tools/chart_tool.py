@@ -1,6 +1,7 @@
 """
 Deterministic chart-type selection based on the *shape* of the query
 result (row count, column count, and dtypes) -- not chosen by the LLM.
+
 This avoids the failure mode where a model confidently asks for a chart
 type that doesn't fit the data it just returned.
 """
@@ -36,16 +37,24 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
         )
     ]
 
-    # Single value -> stat tile, regardless of what the model hinted.
-    # Include the actual row data so the frontend can display the value.
+    # ---------------------------------------------------------
+    # Single value -> stat tile
+    # ---------------------------------------------------------
+    # The frontend needs the actual result data in order to
+    # display the numeric value instead of "undefined".
     if df.shape == (1, 1):
+        value_key = df.columns[0]
+        data = _records(df)
+
         return {
             "type": "stat",
-            "value_key": df.columns[0],
-            "data": _records(df),
+            "value_key": value_key,
+            "data": data,
         }
 
-    # One row, multiple numeric columns (e.g. two-month comparison row) -> stat row
+    # ---------------------------------------------------------
+    # One row / small date-based comparison -> bar chart
+    # ---------------------------------------------------------
     if len(df) <= 2 and date_like_cols and numeric_cols:
         return {
             "type": "bar",
@@ -54,6 +63,9 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
             "data": _records(df),
         }
 
+    # ---------------------------------------------------------
+    # Date + numeric -> line chart
+    # ---------------------------------------------------------
     if date_like_cols and numeric_cols:
         return {
             "type": "line",
@@ -62,6 +74,9 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
             "data": _records(df),
         }
 
+    # ---------------------------------------------------------
+    # Categorical + numeric -> bar chart
+    # ---------------------------------------------------------
     if non_numeric_cols and numeric_cols and len(df) <= 30:
         return {
             "type": "bar",
@@ -70,6 +85,9 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
             "data": _records(df),
         }
 
+    # ---------------------------------------------------------
+    # Two+ numeric columns with multiple rows -> scatter
+    # ---------------------------------------------------------
     if len(numeric_cols) >= 2 and len(df) > 5:
         return {
             "type": "scatter",
@@ -78,6 +96,9 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
             "data": _records(df),
         }
 
+    # ---------------------------------------------------------
+    # Fallback -> table
+    # ---------------------------------------------------------
     return {
         "type": "table",
         "columns": list(df.columns),
@@ -86,6 +107,10 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
 
 
 def _records(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """
+    Convert a DataFrame into JSON-safe records for the frontend.
+    """
+
     safe = df.copy()
 
     for col in safe.columns:

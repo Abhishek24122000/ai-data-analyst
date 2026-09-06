@@ -15,16 +15,35 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
     if df.empty:
         return {"type": "empty"}
 
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-    non_numeric_cols = [c for c in df.columns if c not in numeric_cols]
+    numeric_cols = [
+        c for c in df.columns
+        if pd.api.types.is_numeric_dtype(df[c])
+    ]
+
+    non_numeric_cols = [
+        c for c in df.columns
+        if c not in numeric_cols
+    ]
+
     date_like_cols = [
-        c for c in non_numeric_cols
-        if "date" in c.lower() or "month" in c.lower() or "year" in c.lower() or "week" in c.lower()
+        c
+        for c in non_numeric_cols
+        if (
+            "date" in c.lower()
+            or "month" in c.lower()
+            or "year" in c.lower()
+            or "week" in c.lower()
+        )
     ]
 
     # Single value -> stat tile, regardless of what the model hinted.
+    # Include the actual row data so the frontend can display the value.
     if df.shape == (1, 1):
-        return {"type": "stat", "value_key": df.columns[0]}
+        return {
+            "type": "stat",
+            "value_key": df.columns[0],
+            "data": _records(df),
+        }
 
     # One row, multiple numeric columns (e.g. two-month comparison row) -> stat row
     if len(df) <= 2 and date_like_cols and numeric_cols:
@@ -59,13 +78,20 @@ def select_chart(df: pd.DataFrame, hint: str | None = None) -> dict[str, Any]:
             "data": _records(df),
         }
 
-    return {"type": "table", "columns": list(df.columns), "data": _records(df)}
+    return {
+        "type": "table",
+        "columns": list(df.columns),
+        "data": _records(df),
+    }
 
 
 def _records(df: pd.DataFrame) -> list[dict[str, Any]]:
     safe = df.copy()
+
     for col in safe.columns:
         if pd.api.types.is_datetime64_any_dtype(safe[col]):
             safe[col] = safe[col].astype(str)
+
     safe = safe.where(pd.notnull(safe), None)
+
     return safe.to_dict(orient="records")
